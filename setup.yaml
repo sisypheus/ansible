@@ -1,0 +1,27 @@
+- name: Configure EC2 webserver on ubuntu
+  hosts: local
+  # hosts: webservers
+  become: true
+
+  tasks:
+    - name: Update
+      apt:
+        upgrade: yes
+        update_cache: yes
+
+    - name: Create theo user
+      user:
+        name: theo
+        create_home: yes
+
+    - name: Ensure the group exists
+      group:
+        name: sudo
+        state: present
+
+    - name: Add user to the group
+      user:
+        name: theo
+        groups: sudo
+        append: yes
+
