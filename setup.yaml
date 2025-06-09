@@ -1,7 +1,9 @@
-- name: Configure EC2 webserver on ubuntu
-  hosts: local
-  # hosts: webservers
-  become: true
+# - hosts: local
+- hosts: webservers
+  name: Configure server
+  vars:
+    sudoers:
+      - theo
 
   tasks:
     - name: Update
@@ -9,19 +11,62 @@
         upgrade: yes
         update_cache: yes
 
-    - name: Create theo user
-      user:
-        name: theo
-        create_home: yes
-
-    - name: Ensure the group exists
+    - name: Make sure we have a "admin" group
       group:
-        name: sudo
+        name: admin
         state: present
 
-    - name: Add user to the group
+    - name: Allow "admin" group to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^%admin'
+        line: '%admin ALL=(ALL) NOPASSWD: ALL'
+        validate: visudo -cf %s
+    
+    - name: Add sudoers users to "admin" group
       user:
-        name: theo
-        groups: sudo
+        name: "{{ item }}"
+        groups: admin
         append: yes
+      with_items: "{{ sudoers }}"
 
+    - name: Add ssh_key
+      authorized_key:
+        user: theo
+        state: present
+        key: "{{ lookup('file', '/Users/theopoette/.ssh/id_rsa.pub') }}"
+
+    - name: Install zsh
+      ansible.builtin.package:
+        name: zsh
+        state: present
+      become: true
+
+    - name: Set user shell to zsh
+      ansible.builtin.user:
+        name: theo
+        shell: /bin/zsh
+      become: true
+
+    - name: Download ohmyzsh
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh
+        dest: "/home/theo/install.sh"
+        mode: '0755'
+
+    - community.general.ufw:
+      rule: allow
+      name: OpenSSH
+
+    - name: Allow all access to tcp port 80
+      community.general.ufw:
+      rule: allow
+      port: '80'
+      proto: tcp
+
+    - name: Allow all access to tcp port 443
+      community.general.ufw:
+      rule: allow
+      port: '443'
+      proto: tcp
