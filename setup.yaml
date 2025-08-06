@@ -6,25 +6,31 @@
       - theo
 
   tasks:
-    # - name: Update
-    #   apt:
-    #     upgrade: yes
-    #     update_cache: yes
+    - name: Update
+      become: true
+      ansible.builtin.apt:
+        upgrade: yes
+        update_cache: yes
 
     - name: Make sure we have a "admin" group
       group:
         name: admin
         state: present
+        system: yes
 
-    - name: Allow "admin" group to have passwordless sudo
-      lineinfile:
-        dest: /etc/sudoers
-        state: present
-        regexp: '^%admin'
-        line: '%admin ALL=(ALL) NOPASSWD: ALL'
-        validate: visudo -cf %s
+    - name: Allow "admin" group passwordless sudo
+      become: true
+      copy:
+        dest: /etc/sudoers.d/admin
+        content: |
+          %admin ALL=(ALL) NOPASSWD: ALL
+        owner: root
+        group: root
+        mode: '0440'
+        backup: yes
     
     - name: Add sudoers users to "admin" group
+      become: true
       user:
         name: "{{ item }}"
         groups: admin
@@ -32,6 +38,7 @@
       with_items: "{{ sudoers }}"
 
     - name: Add ssh_key
+      become: true
       authorized_key:
         user: theo
         state: present
@@ -50,23 +57,50 @@
       become: true
 
     - name: Download ohmyzsh
+      become: true
       ansible.builtin.get_url:
         url: https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh
         dest: "/home/theo/install.sh"
         mode: '0755'
 
-    - name: Allow ssh
+    - name: Check if Oh My Zsh is already installed
+      become: true
+      stat:
+        path: /home/theo/.oh-my-zsh
+      register: ohmyzsh_installed
+
+    - name: Install Oh My Zsh
+      become: true
+      shell: /home/theo/install.sh --unattended
+      when: not ohmyzsh_installed.stat.exists
+
+    - name: Make sure UFW is installed
+      ansible.builtin.package:
+        name: ufw
+        state: present
+      become: true
+
+    - name: Allow SSH
+      become: true
       community.general.ufw:
         rule: allow
+        name: OpenSSH
 
     - name: Allow all access to tcp port 80
+      become: true
       community.general.ufw:
         rule: allow
         port: '80'
         proto: tcp
 
     - name: Allow all access to tcp port 443
+      become: true
       community.general.ufw:
         rule: allow
         port: '443'
         proto: tcp
+    
+    - name: Enable UFW
+      become: true
+      community.general.ufw:
+        state: enabled
